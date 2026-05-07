@@ -39,6 +39,10 @@
 #define __all_sync(mask, var) __all(var)
 #define __any_sync(mask, var) __any(var)
 #define __ballot_sync(mask, var) __ballot(var)
+// __syncwarp() is implicit on AMD wavefronts (lockstep execution), so the
+// CUDA-side barrier maps to a no-op. Variadic to swallow either the 0-arg or
+// 1-arg (lane-mask) call shape.
+#define __syncwarp(...) ((void)0)
 // nv_bfloat16 / nv_bfloat162 are CUDA-side typedef names; HIP exposes the same
 // layout under __hip_bfloat16{,2}. Provide aliases so shared code in
 // ggml-cuda/*.cu compiles unchanged.
@@ -109,6 +113,8 @@ typedef int cublasMath_t;
 #define cudaMemGetInfo hipMemGetInfo
 #define cudaOccupancyMaxPotentialBlockSize hipOccupancyMaxPotentialBlockSize
 #define cudaOccupancyMaxActiveBlocksPerMultiprocessor hipOccupancyMaxActiveBlocksPerMultiprocessor
+#define cudaFuncSetAttribute hipFuncSetAttribute
+#define cudaFuncAttributeMaxDynamicSharedMemorySize hipFuncAttributeMaxDynamicSharedMemorySize
 #define cudaSetDevice hipSetDevice
 #define cudaStreamCreateWithFlags hipStreamCreateWithFlags
 #define cudaStreamDestroy hipStreamDestroy
