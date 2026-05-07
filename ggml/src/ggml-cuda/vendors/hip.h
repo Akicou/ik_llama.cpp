@@ -20,6 +20,18 @@
 #define CUDA_R_16F  HIPBLAS_R_16F
 #define CUDA_R_32F  HIPBLAS_R_32F
 #define __shfl_xor_sync(mask, var, laneMask, width) __shfl_xor(var, laneMask, width)
+// Sync variants of the warp shuffle / vote intrinsics — on AMD the lane mask
+// is implicit (whole wavefront participates) so we drop it and forward to the
+// non-sync version provided by HIP.
+#define __shfl_sync(mask, var, srcLane, width) __shfl(var, srcLane, width)
+#define __all_sync(mask, var) __all(var)
+#define __any_sync(mask, var) __any(var)
+#define __ballot_sync(mask, var) __ballot(var)
+// nv_bfloat16 / nv_bfloat162 are CUDA-side typedef names; HIP exposes the same
+// layout under __hip_bfloat16{,2}. Provide aliases so shared code in
+// ggml-cuda/*.cu compiles unchanged.
+typedef __hip_bfloat16  nv_bfloat16;
+typedef __hip_bfloat162 nv_bfloat162;
 #define cublasComputeType_t hipblasDatatype_t //deprecated, new hipblasComputeType_t not in 5.6
 #define cublasCreate hipblasCreate
 #define cublasDestroy hipblasDestroy
@@ -72,6 +84,7 @@
 #define cudaMemsetAsync hipMemsetAsync
 #define cudaMemGetInfo hipMemGetInfo
 #define cudaOccupancyMaxPotentialBlockSize hipOccupancyMaxPotentialBlockSize
+#define cudaOccupancyMaxActiveBlocksPerMultiprocessor hipOccupancyMaxActiveBlocksPerMultiprocessor
 #define cudaSetDevice hipSetDevice
 #define cudaStreamCreateWithFlags hipStreamCreateWithFlags
 #define cudaStreamDestroy hipStreamDestroy
