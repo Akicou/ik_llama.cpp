@@ -452,6 +452,64 @@ You can download it from your Linux distro's package manager or from here: [ROCm
   Make sure that `AMDGPU_TARGETS` is set to the GPU arch you want to compile for. The above example uses `gfx1100` that corresponds to Radeon RX 7900XTX/XT/GRE. You can find a list of targets [here](https://llvm.org/docs/AMDGPUUsage.html#processors)
   Find your gpu version string by matching the most significant version information from `rocminfo | grep gfx | head -1 | awk '{print $2}'` with the list of processors, e.g. `gfx1035` maps to `gfx1030`.
 
+#### AMD Strix Halo / Ryzen AI Max+ (gfx1151)
+
+The Ryzen AI Max / Max+ family ("Strix Halo", e.g. Ryzen AI Max+ 395) pairs
+Zen5 cores with an integrated Radeon 8060S iGPU based on RDNA 3.5. The iGPU
+reports as `gfx1151` and is already covered by the RDNA3 code path in
+`ggml/src/ggml-cuda/vendors/hip.h`, so no source changes are needed — but
+two things matter for getting good performance out of the APU:
+
+1. **Build with `-DGGML_HIP_UMA=ON`.** The iGPU shares LPDDR5X with the CPU,
+   so weights and KV cache should stay in system memory instead of being
+   copied through a separate device allocation. Without UMA, hipMalloc
+   pins a separate buffer and you waste both bandwidth and memory.
+2. **Build with full-width AVX-512 enabled.** Zen5 has a true 512-bit data
+   path and supports `AVX512_VNNI`, `AVX512_VBMI`, and `AVX512_BF16`.
+   Enabling these activates the IQK GEMM kernels gated by `HAVE_FANCY_SIMD`
+   (see [CPU build flags for AVX-512](#cpu-build-flags-for-avx-512-zen4--sapphire-rapids)),
+   which is the dominant CPU hot path for quantized prompt processing —
+   relevant whenever any layers stay on the CPU via `-ngl` / `-ot`.
+
+Linux one-liner (CMake):
+
+```bash
+HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
+    cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DGGML_HIPBLAS=ON \
+        -DGGML_HIP_UMA=ON \
+        -DAMDGPU_TARGETS=gfx1151 \
+        -DGGML_NATIVE=ON \
+        -DGGML_AVX512=ON \
+        -DGGML_AVX512_VBMI=ON \
+        -DGGML_AVX512_VNNI=ON \
+        -DGGML_AVX512_BF16=ON
+cmake --build build --config Release -j
+```
+
+A wrapper that runs the same configuration is provided as
+[`scripts/build-strix-halo.sh`](../scripts/build-strix-halo.sh) (and
+`scripts/build-strix-halo.bat` on Windows). It defaults to `gfx1151` but
+respects `AMDGPU_TARGETS=...` from the environment for related parts (e.g.
+`gfx1150` on non-Halo Strix Point).
+
+Equivalent `make` invocation:
+
+```bash
+make -j GGML_HIPBLAS=1 GGML_HIP_UMA=1 AMDGPU_TARGETS=gfx1151
+```
+
+Notes:
+
+- If `rocminfo` does not list `gfx1151` (older ROCm releases), update ROCm
+  or set `HSA_OVERRIDE_GFX_VERSION=11.0.0` at runtime to fall back to the
+  generic RDNA3 codepath.
+- The system memory the iGPU is allowed to use is governed by the
+  motherboard / BIOS "GPU memory" or "GART" / "UMA Frame Buffer" setting
+  (and on Linux, by `amdttm`/`amdgpu` module parameters such as
+  `amdgpu.gttsize=...` / `amdgpu.vm_fragment_size=...`). With UMA enabled
+  in the build, `-ngl 99` will share the same pool the OS sees.
 
 The environment variable [`HIP_VISIBLE_DEVICES`](https://rocm.docs.amd.com/en/latest/understand/gpu_isolation.html#hip-visible-devices) can be used to specify which GPU(s) will be used.
 If your GPU is not officially supported you can use the environment variable [`HSA_OVERRIDE_GFX_VERSION`] set to a similar GPU, for example 10.3.0 on RDNA2 (e.g. gfx1030, gfx1031, or gfx1035) or 11.0.0 on RDNA3.
