@@ -8,6 +8,15 @@
 // for rocblas_initialize()
 #include "rocblas/rocblas.h"
 #endif // __HIP_PLATFORM_AMD__
+
+// Some headers in this fork were renamed from the older GGML_USE_HIPBLAS gate
+// to the newer GGML_USE_HIP gate (matching upstream llama.cpp). Define the
+// alias whenever the build system selected the HIP backend so both styles of
+// preprocessor checks see the same answer.
+#ifndef GGML_USE_HIP
+#define GGML_USE_HIP
+#endif
+
 #define CUBLAS_COMPUTE_16F HIPBLAS_R_16F
 #define CUBLAS_COMPUTE_32F HIPBLAS_R_32F
 #define CUBLAS_COMPUTE_32F_FAST_16F HIPBLAS_R_32F
@@ -18,12 +27,15 @@
 #define CUBLAS_STATUS_SUCCESS HIPBLAS_STATUS_SUCCESS
 #define CUBLAS_TF32_TENSOR_OP_MATH 0
 #define CUDA_R_16F  HIPBLAS_R_16F
+#define CUDA_R_16BF HIPBLAS_R_16B
 #define CUDA_R_32F  HIPBLAS_R_32F
 #define __shfl_xor_sync(mask, var, laneMask, width) __shfl_xor(var, laneMask, width)
 // Sync variants of the warp shuffle / vote intrinsics — on AMD the lane mask
 // is implicit (whole wavefront participates) so we drop it and forward to the
 // non-sync version provided by HIP.
 #define __shfl_sync(mask, var, srcLane, width) __shfl(var, srcLane, width)
+#define __shfl_up_sync(mask, var, delta, width) __shfl_up(var, delta, width)
+#define __shfl_down_sync(mask, var, delta, width) __shfl_down(var, delta, width)
 #define __all_sync(mask, var) __all(var)
 #define __any_sync(mask, var) __any(var)
 #define __ballot_sync(mask, var) __ballot(var)
@@ -40,8 +52,20 @@ typedef __hip_bfloat162 nv_bfloat162;
 #define cublasGemmStridedBatchedEx hipblasGemmStridedBatchedEx
 #define cublasHandle_t hipblasHandle_t
 #define cublasSetMathMode(handle, mode) CUBLAS_STATUS_SUCCESS
+// cublas math-mode plumbing; hipBLAS doesn't expose an equivalent so we treat
+// reads/writes as no-ops and pretend the caller's saved value is "default".
+typedef int cublasMath_t;
+#define CUBLAS_DEFAULT_MATH 0
+#define cublasGetMathMode(handle, out_mode) (*(out_mode) = CUBLAS_DEFAULT_MATH, CUBLAS_STATUS_SUCCESS)
 #define cublasSetStream hipblasSetStream
 #define cublasSgemm hipblasSgemm
+#define cublasStrsmBatched hipblasStrsmBatched
+#define CUBLAS_SIDE_LEFT       HIPBLAS_SIDE_LEFT
+#define CUBLAS_SIDE_RIGHT      HIPBLAS_SIDE_RIGHT
+#define CUBLAS_FILL_MODE_LOWER HIPBLAS_FILL_MODE_LOWER
+#define CUBLAS_FILL_MODE_UPPER HIPBLAS_FILL_MODE_UPPER
+#define CUBLAS_DIAG_NON_UNIT   HIPBLAS_DIAG_NON_UNIT
+#define CUBLAS_DIAG_UNIT       HIPBLAS_DIAG_UNIT
 #define cublasStatus_t hipblasStatus_t
 #define cudaDataType_t hipblasDatatype_t //deprecated, new hipblasDatatype not in 5.6
 #define cudaDeviceCanAccessPeer hipDeviceCanAccessPeer
@@ -92,7 +116,9 @@ typedef __hip_bfloat162 nv_bfloat162;
 #define cudaStreamNonBlocking hipStreamNonBlocking
 #define cudaStreamPerThread hipStreamPerThread
 #define cudaStreamSynchronize hipStreamSynchronize
-#define cudaStreamWaitEvent(stream, event, flags) hipStreamWaitEvent(stream, event, flags)
+// hipStreamWaitEvent has a default value for `flags` (__dparm(0)) so accept
+// either the 2-arg or 3-arg call shape that CUDA users write.
+#define cudaStreamWaitEvent hipStreamWaitEvent
 #define cudaStream_t hipStream_t
 #define cudaSuccess hipSuccess
 #define __trap() do { abort(); __builtin_unreachable(); } while(0)
