@@ -113,7 +113,10 @@ typedef int cublasMath_t;
 #define cudaMemGetInfo hipMemGetInfo
 #define cudaOccupancyMaxPotentialBlockSize hipOccupancyMaxPotentialBlockSize
 #define cudaOccupancyMaxActiveBlocksPerMultiprocessor hipOccupancyMaxActiveBlocksPerMultiprocessor
-#define cudaFuncSetAttribute hipFuncSetAttribute
+// hipFuncSetAttribute takes `const void*` for the kernel handle, while
+// cudaFuncSetAttribute accepts a typed function pointer. Cast in the macro
+// so callers using the CUDA spelling don't need source-level changes.
+#define cudaFuncSetAttribute(func, attr, val) hipFuncSetAttribute((const void *)(func), (attr), (val))
 #define cudaFuncAttributeMaxDynamicSharedMemorySize hipFuncAttributeMaxDynamicSharedMemorySize
 #define cudaSetDevice hipSetDevice
 #define cudaStreamCreateWithFlags hipStreamCreateWithFlags
