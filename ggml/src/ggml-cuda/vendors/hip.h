@@ -187,6 +187,22 @@ static __device__ __forceinline__ int __vsub4(const int a, const int b) {
     return __vsubss4(a, b);
 }
 
+// __dp4a polyfill. CUDA's __dp4a is the 8-bit-packed dot-product intrinsic;
+// HIP only exposes it through ggml_cuda_dp4a in common.cuh, but several
+// template-instances (mmvq-instance-iq{1,2}_bn.cu, mmq_id_common.cuh) call
+// __dp4a directly. Mirror the same per-arch lowering used in common.cuh.
+static __device__ __forceinline__ int __dp4a(const int a, const int b, int c) {
+#if defined(__gfx906__) || defined(__gfx908__) || defined(__gfx90a__) || defined(RDNA2)
+    return __builtin_amdgcn_sdot4(a, b, c, false);
+#elif defined(RDNA3)
+    return __builtin_amdgcn_sudot4(true, a, true, b, c, false);
+#else
+    const int8x4_t va = reinterpret_cast<const int8x4_t &>(a);
+    const int8x4_t vb = reinterpret_cast<const int8x4_t &>(b);
+    return c + va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2] + va[3] * vb[3];
+#endif
+}
+
 static __device__ __forceinline__ unsigned int __vcmpeq4(unsigned int a, unsigned int b) {
     const uint8x4_t& va = reinterpret_cast<const uint8x4_t&>(a);
     const uint8x4_t& vb = reinterpret_cast<const uint8x4_t&>(b);
